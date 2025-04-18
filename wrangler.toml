@@ -1,0 +1,10 @@
+name = "edgeproxy"
+main = "dist/_worker.js"
+compatibility_date = "2024-09-23"
+
+[build]
+command = "npm run build"
+
+[vars]
+UUID = "7d204f05-e411-46d5-a916-a9e8c4399c9d,d96110bb-dbe3-4800-ae39-1be17c9c603f"
+PROXY_IP = "104.18.128.25:443,162.159.136.94:443"

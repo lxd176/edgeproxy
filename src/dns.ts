@@ -8,10 +8,8 @@ export async function processDNS(ws: WebSocket, header: Header) {
     hostname: '8.8.8.8',
     port: 53,
   })
-  await socket.opened
-  ws.send(Protocol.RESPONSE_DATA(header.version))
-
   const writer = socket.writable.getWriter()
+  await writer.write(header.rawData)
   ws.addEventListener('message', async (event) => {
     await writer.write(event.data)
   })
@@ -21,6 +19,18 @@ export async function processDNS(ws: WebSocket, header: Header) {
   ws.addEventListener('error', async () => {
     await socket.close()
   })
+  const reader = socket.readable.getReader()
+  const { done, value } = await reader.read()
+  if (done) {
+    throw Error('connection was done')
+  }
+  reader.releaseLock()
+  ws.send(
+    await new Blob([
+      Protocol.RESPONSE_DATA(header.version),
+      value,
+    ]).arrayBuffer(),
+  )
 
   await socket.readable.pipeTo(
     new WritableStream({

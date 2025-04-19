@@ -3,18 +3,71 @@ import { Protocol } from './consts'
 import { safeCloseWebSocket } from './utils'
 import type { Header } from './protocol'
 
-function retry(proxyIPs: string[]): Socket | undefined {
+async function retry(
+  version: number,
+  rawData: ArrayBuffer,
+  ws: WebSocket,
+  proxyIPs: string[],
+): Promise<Socket | undefined> {
   for (const proxyIP of proxyIPs) {
     try {
-      const socket = connect(proxyIP)
+      const socket = await dial(proxyIP, version, rawData, ws)
       return socket
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_) {
+    } catch (err) {
+      console.error(err)
       continue
     }
   }
+}
 
-  return undefined
+async function dial(
+  remote: SocketAddress | string,
+  version: number,
+  rawData: ArrayBuffer,
+  ws: WebSocket,
+): Promise<Socket> {
+  let messageFn = null
+  let closeFn = null
+  let errorFn = null
+  try {
+    const socket = connect(remote)
+    const writer = socket.writable.getWriter()
+    await writer.write(rawData)
+    messageFn = async (event: MessageEvent) => {
+      await writer.write(event.data)
+    }
+    closeFn = async () => {
+      await socket.close()
+    }
+    errorFn = async () => {
+      await socket.close()
+    }
+    ws.addEventListener('message', messageFn)
+    ws.addEventListener('close', closeFn)
+    ws.addEventListener('error', errorFn)
+
+    const reader = socket.readable.getReader()
+    const { done, value } = await reader.read()
+    if (done) {
+      throw Error('connection was done')
+    }
+    reader.releaseLock()
+    ws.send(
+      await new Blob([Protocol.RESPONSE_DATA(version), value]).arrayBuffer(),
+    )
+    return socket
+  } catch (err) {
+    if (messageFn) {
+      ws.removeEventListener('message', messageFn)
+    }
+    if (closeFn) {
+      ws.removeEventListener('close', closeFn)
+    }
+    if (errorFn) {
+      ws.removeEventListener('error', errorFn)
+    }
+    throw err
+  }
 }
 
 export async function processTCP(
@@ -24,31 +77,21 @@ export async function processTCP(
 ) {
   let socket: Socket | undefined
   try {
-    socket = connect({ hostname: header.address, port: header.port })
+    socket = await dial(
+      { hostname: header.address, port: header.port },
+      header.version,
+      header.rawData,
+      ws,
+    )
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (_) {
-    socket = retry(proxyIPs)
+    socket = await retry(header.version, header.rawData, ws, proxyIPs)
   }
   if (socket === undefined) {
     throw Error(
       `cannot connect to hostname: ${header.address}, port: ${header.port}`,
     )
   }
-  await socket.opened
-  ws.send(Protocol.RESPONSE_DATA(header.version))
-
-  const writer = socket.writable.getWriter()
-  await writer.write(header.rawData)
-  ws.addEventListener('message', async (event) => {
-    await writer.write(event.data)
-  })
-  ws.addEventListener('close', async () => {
-    await socket.close()
-  })
-  ws.addEventListener('error', async () => {
-    await socket.close()
-  })
-
   await socket.readable.pipeTo(
     new WritableStream({
       write(chunk) {

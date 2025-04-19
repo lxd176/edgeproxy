@@ -17,11 +17,12 @@ export default {
     try {
       const upgradeHeader = request.headers.get('Upgrade')
       if (!upgradeHeader || upgradeHeader !== 'websocket') {
+        const url = new URL(request.url)
+
         for (const uuid of env.UUID.split(',').filter((v) => v !== '')) {
           if (!request.url.includes(uuid)) {
             continue
           }
-          const url = new URL(request.url)
           return new Response(normalSubscription(uuid, url))
         }
         return await indexPage()

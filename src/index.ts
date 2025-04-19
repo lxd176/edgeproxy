@@ -33,4 +33,4 @@ export default {
       return await errorPage()
     }
   },
-}
+} satisfies ExportedHandler<Env>

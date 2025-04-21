@@ -12,7 +12,7 @@
     "check": "eslint . && prettier --check '*.{json,js}' '.github/**/*.{yaml,yml}' 'src/**/*.{js,ts}'"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250418.0",
+    "@cloudflare/workers-types": "^4.20250421.0",
     "@eslint/js": "^9.24.0",
     "eslint": "^9.24.0",
     "prettier": "^3.5.3",
